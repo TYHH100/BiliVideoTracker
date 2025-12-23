@@ -14,6 +14,7 @@ import mimetypes
 from urllib.parse import urlparse
 import time
 import logging
+from core import debug_log
 
 # 配置日志
 logger = logging.getLogger(__name__)
