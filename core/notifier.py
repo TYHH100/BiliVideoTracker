@@ -1,8 +1,9 @@
 import smtplib
-from email.mime.text import MIMEText
 from email.header import Header
+from email.mime.text import MIMEText
 from email.utils import formataddr
-from core import logger, debug_log
+
+from core import debug_log, logger
 
 
 def send_notification(settings, subject, html_content):

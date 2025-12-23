@@ -3,9 +3,9 @@
 基本测试文件，用于GitHub Actions工作流
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

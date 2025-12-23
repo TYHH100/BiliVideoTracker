@@ -1,10 +1,12 @@
-from apscheduler.schedulers.background import BackgroundScheduler
 import datetime
 import time
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
 import core.database as db
+from core import daily_log_maintenance, debug_log, logger
 from core.bili_api import BiliAPI
 from core.notifier import send_notification
-from core import logger, daily_log_maintenance, debug_log
 
 scheduler = BackgroundScheduler()
 bili_api = BiliAPI()

@@ -1,9 +1,12 @@
-import requests
 import re
 import time
-from urllib.parse import urlparse, parse_qs
-from . import logger, APIError, ValidationError
+from urllib.parse import parse_qs, urlparse
+
+import requests
+
 from core import debug_log
+
+from . import APIError, ValidationError, logger
 
 
 class BiliAPI:

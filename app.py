@@ -1,27 +1,29 @@
-from flask import (
-    Flask,
-    request,
-    jsonify,
-    render_template,
-    Response,
-    send_from_directory,
-)
-import os
-import core.database as db
-from core.bili_api import BiliAPI
-import core.scheduler as sched
-import core.notifier as notifier
-import secrets
-import requests
-import sys
-import uuid
 import argparse
 import hashlib
-import mimetypes
-from urllib.parse import urlparse
-import time
 import logging
+import mimetypes
+import os
+import secrets
+import sys
+import time
+import uuid
+from urllib.parse import urlparse
+
+import requests
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+)
+
+import core.database as db
+import core.notifier as notifier
+import core.scheduler as sched
 from core import debug_log
+from core.bili_api import BiliAPI
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -274,8 +276,9 @@ def add_monitor_item():
                 break
 
         # 添加成功后立即检查该合集的更新
-        from core.scheduler import check_single_monitor
         import threading
+
+        from core.scheduler import check_single_monitor
 
         # 在后台线程中执行检查，避免阻塞响应
         if new_monitor_id:
@@ -528,12 +531,14 @@ def reset_token():
 
 # 导入所需的库（将导入移到函数外部）
 import hashlib
+import io
 import mimetypes
 import time
 from urllib.parse import urlparse
-from core import logger
+
 from PIL import Image
-import io
+
+from core import logger
 
 
 # --- 图片反代 (绕过B站防盗链) ---
@@ -884,7 +889,7 @@ if __name__ == "__main__":
     port = int(settings.get("server_port", "5000"))
 
     # 初始化debug模式
-    from core import set_debug_mode, get_debug_mode
+    from core import get_debug_mode, set_debug_mode
 
     # 优先使用命令行参数
     debug_enabled = args.debug
