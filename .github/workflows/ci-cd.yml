@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master, actions-Test ]
+    branches: [ actions-Test ]
   pull_request:
-    branches: [ main, master, actions-Test ]
+    branches: [ actions-Test ]
   release:
     types: [ published ]
   schedule:
