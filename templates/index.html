@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站合集监控助手</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+    <!-- 背景图片容器 -->
+    <div id="background-container">
+        <div id="background-overlay"></div>
+        <img id="background-image" class="background-img" alt="背景图片">
+    </div>
+
+    <div id="auth-modal" class="modal">
+        <div class="modal-content">
+            <h2>🔐 系统认证</h2>
+            <p>请输入访问令牌以执行操作</p>
+            <input type="password" id="auth-input" placeholder="输入 Token..." />
+            <div class="msg-box" id="auth-msg"></div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="handleLogin()">确认令牌</button>
+                <button class="btn-secondary" onclick="closeModal('auth-modal')">仅查看</button>
+            </div>
+            <div style="margin-top: 15px; font-size: 12px; color: #888;">
+                首次使用或忘记令牌？请查看后端控制台输出或重置数据库。
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container" id="app-main">
+        
+        <header class="navbar">
+            <div class="brand">📺 BiliVideoTracker - <span style="color: var(--accent);">公共访问</span></div>
+            <div class="nav-links">
+                <a href="#" class="active" onclick="switchTab('home')">概览 & 监控</a>
+                <a href="#" onclick="switchTab('about')">关于</a>
+            </div>
+            <div class="controls">
+                <button class="icon-btn" onclick="toggleTheme()" title="切换日夜模式">🌗</button>
+                <button class="icon-btn" onclick="showAuthModal()" title="登录管理">🔑</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="tab-home" class="tab-content active">
+                
+                <div class="card status-card">
+                    <div class="status-header">
+                        <h3>运行状态: <span id="monitor-status-text" class="status-badge">--</span></h3>
+                    </div>
+                    <div class="status-details">
+                        <p>下次自动检查时间: <span id="next-check-time">--</span></p>
+                    </div>
+                    <div class="status-actions"></div>
+                </div>
+
+                <div class="card">
+                    <div class="status-header">
+                        <h3>最近更新</h3>
+                    </div>
+                    <div id="recent-updates" class="recent-updates-container">
+                        <!-- 最近更新的视频将在这里显示 -->
+                        <p class="no-data">暂无更新记录</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="status-header">
+                        <h3>监控列表</h3>
+                        <div class="filter-tabs">
+                                <!--<button class="filter-btn active" onclick="filterMonitors('all')">全部</button>-->
+                                <button class="filter-btn active" onclick="filterMonitors('active')">活跃</button>
+                                <button class="filter-btn" onclick="filterMonitors('archived')">已归档</button>
+                            </div>
+                                <button class="btn-primary" onclick="showAddModal()">+ 添加新监控</button>
+                            </div>
+                        <div id="monitor-grid" class="grid-container">
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-about" class="tab-content">
+                <div class="card">
+                    <h3>关于 B站合集监控助手</h3>
+                    <div class="about-content">  
+                        <div class="about-section">
+                            <h4>相关信息</h4>
+                            <ul>
+                                <li>后端使用: <a href="https://www.python.org/" target="_blank">Python</a></li>
+                                    <li>所用到的扩展: 
+                                        <a href="https://flask.palletsprojects.com/en/stable/" target="_blank">Flask</a>
+                                        <a href="https://docs.python-requests.org/en/latest/index.html" target="_blank">Requests</a>
+                                        <a href="https://apscheduler.readthedocs.io/en/3.x/index.html" target="_blank">APScheduler</a>
+                                        <a href="https://github.com/pyca/bcrypt/" target="_blank">bcrypt</a>
+                                        <a href="https://python-pillow.github.io/" target="_blank">Pillow</a>
+                                    </li>
+                                    <li>打包使用: <a href="https://pyinstaller.org/en/stable/" target="_blank">PyInstaller</a></li>
+                                <li>前后端代码基底: <a href="https://gemini.google.com/" target="_blank">Gemini 3 Pro</a></li>
+                                <li>进一步修改: <a href="https://chat.deepseek.com/" target="_blank">DeepSeek</a></li>
+                                <li>数据库: <a href="https://sqlite.org/index.html" target="_blank">SQLite</a></li>
+                                <li>b站API: <a href="https://github.com/SocialSisterYi/bilibili-API-collect" target="_blank">bilibili-API-collect</a> By: <a href="https://github.com/SocialSisterYi" target="_blank">SocialSisterYi</a></li>
+                            </ul>
+                        </div>
+                        <div class="about-section">
+                            <h4>版本信息</h4>
+                            <p>当前版本: 1.1.5</p>
+                        </div>
+                        <div class="about-section">
+                            <h4><a href="https://github.com/TYHH100/BiliVideoTracker" target="_blank">Github</a></h4>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-settings" class="tab-content">
+                <!-- 设置页面的TAB栏 -->
+                <div class="settings-tabs">
+                    <button class="tab-btn active" onclick="switchSettingsTab('notification')">通知设置</button>
+                    <button class="tab-btn" onclick="switchSettingsTab('monitor')">监控设置</button>
+                    <button class="tab-btn" onclick="switchSettingsTab('system')">系统设置</button>
+                    <button class="tab-btn" onclick="switchSettingsTab('data')">数据管理</button>
+                </div>
+
+                <!-- 通知设置TAB -->
+                <div id="settings-tab-notification" class="settings-tab-content active">
+                    <div class="card">
+                        <h3>📧 邮件通知配置</h3>
+                        <div class="form-group">
+                            <label class="switch-label">
+                                <span>启用邮件通知</span>
+                                <label class="switch-toggle">
+                                    <input type="checkbox" id="set-smtp-enable">
+                                    <span class="switch-slider"></span>
+                                </label>
+                            </label>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>SMTP 服务器</label>
+                                <input type="text" id="set-smtp-server" placeholder="smtp.163.com">
+                            </div>
+                            <div class="form-group">
+                                <label>SMTP 端口</label>
+                                <input type="number" id="set-smtp-port" placeholder="465">
+                            </div>
+                            <div class="form-group">
+                                <label>邮箱账号</label>
+                                <input type="text" id="set-email-account" placeholder="example@163.com">
+                            </div>
+                            <div class="form-group">
+                                <label>授权码 (非密码)</label>
+                                <input type="password" id="set-email-auth">
+                            </div>
+                            <div class="form-group">
+                                <label>发件人名称</label>
+                                <input type="text" id="set-sender-name" placeholder="B站监控助手">
+                            </div>
+                            <div class="form-group full-width">
+                                <label>接收邮箱 (多个用逗号分隔)</label>
+                                <input type="text" id="set-receivers">
+                            </div>
+                            <div class="form-group full-width">
+                                <label class="switch-label">
+                                    <span>使用 TLS/SSL 加密</span>
+                                    <label class="switch-toggle">
+                                        <input type="checkbox" id="set-use-tls" checked>
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                            <div class="form-group full-width">
+                                <label class="switch-label">
+                                    <span>启用集中发送邮件</span>
+                                    <label class="switch-toggle">
+                                        <input type="checkbox" id="set-smtp-batch-send">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                                <p class="hint">开启后，所有监控项更新完成后统一发送一封邮件</p>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-secondary" onclick="testEmail()">🧪 测试配置</button>
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 监控设置TAB -->
+                <div id="settings-tab-monitor" class="settings-tab-content">
+                    <div class="card">
+                        <h3>⏱️ 监控冷却时间配置</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>全局检查间隔 (秒)</label>
+                                <input type="number" id="set-global-cooldown" placeholder="600" min="60">
+                            </div>
+                            <div class="form-group">
+                                <label>单个监控项间隔 (秒)</label>
+                                <input type="number" id="set-item-cooldown" placeholder="30" min="5">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📋 最近更新视频设置</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>显示最近更新视频数量</label>
+                                <input type="number" id="set-recent-updates-limit" placeholder="5" min="1" max="50">
+                                <p class="hint">设置显示的最近更新视频数量</p>
+                            </div>
+                            <div class="form-group">
+                                <label>数据库保存最近更新视频数量</label>
+                                <input type="number" id="set-recent-updates-save-limit" placeholder="5" min="1" max="100">
+                                <p class="hint">设置系统保存的最近更新视频记录数量，超出将自动清理旧记录</p>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统设置TAB -->
+                <div id="settings-tab-system" class="settings-tab-content">
+                    <div class="card">
+                        <h3>🖥️ 服务器配置</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>服务器IP地址</label>
+                                <input type="text" id="set-server-host" placeholder="127.0.0.1">
+                                <p class="hint">设置服务器监听的IP地址</p>
+                            </div>
+                            <div class="form-group">
+                                <label>服务器端口</label>
+                                <input type="number" id="set-server-port" placeholder="5000" min="1" max="65535">
+                                <p class="hint">设置服务器监听的端口号</p>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                            <p class="hint">修改服务器配置后需重启程序生效</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📝 日志清理配置</h3>
+                        <div class="form-grid">
+                            <div class="form-group full-width">
+                                <label class="switch-label">
+                                    <span>自动清理日志</span>
+                                    <label class="switch-toggle">
+                                        <input type="checkbox" id="set-log-auto-clean">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>日志保留天数</label>
+                                <input type="number" id="set-log-retention-days" placeholder="7" min="1" max="365">
+                                <p class="hint">设置日志保留的天数，超过将自动清理</p>
+                            </div>
+                            <!--<div class="form-group">
+                                <label>日志最大大小 (MB)</label>
+                                <input type="number" id="set-log-max-size-mb" placeholder="10" min="1" max="1000">
+                                <p class="hint">设置单个日志文件的最大大小</p>
+                            </div>-->
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>🐞 调试设置</h3>
+                        <div class="form-grid">
+                            <div class="form-group full-width">
+                                <label class="switch-label">
+                                    <span>启用Debug日志</span>
+                                    <label class="switch-toggle">
+                                        <input type="checkbox" id="set-debug-mode">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                                <p class="hint">开启后将相关调试信息记录到debug日志文件</p>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="saveSettings()">💾 保存配置</button>
+                        </div>
+                    </div>
+
+                    <div class="card danger-zone">
+                        <h3>🛡️ 令牌管理</h3>
+                        <div class="token-info">
+                            <p>当前令牌哈希: <code id="token-hash-view">--</code></p>
+                            <p>创建时间: <span id="token-date-view">--</span></p>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-danger" onclick="resetToken()">🔄 重置访问令牌</button>
+                        </div>
+                        <p class="hint">注意：重置后需要重新登录，旧令牌将立即失效。</p>
+                    </div>
+                </div>
+
+                <!-- 数据管理TAB -->
+                <div id="settings-tab-data" class="settings-tab-content">
+                    <div class="card">
+                        <h3>📥 导入旧版监控数据</h3>
+                        <div class="form-group">
+                            <label>导入旧版监控的 JSON 文件</label>
+                            <p class="hint">支持导入旧版生成的 monitored.json 文件</p>
+                            <input type="file" id="import-json-file" accept=".json" style="margin-top: 10px;">
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn-primary" onclick="importOldMonitors()">📥 导入监控数据</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="add-modal" class="modal">
+        <div class="modal-content">
+            <h3>添加监控 (系列/合集)</h3>
+            <p>请粘贴 B站合集或系列的完整链接：</p>
+            <input type="text" id="add-url-input" placeholder="https://space.bilibili.com/USER/lists/ID?type=series">
+            <div class="msg-box" id="add-msg"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('add-modal')">取消</button>
+                <button class="btn-primary" onclick="submitAddMonitor()">确定添加</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 背景图片设置模态框 -->
+    <div id="background-modal" class="modal">
+        <div class="modal-content">
+            <h3>自定义背景图片</h3>
+            <div class="background-options">
+                <div class="option-group">
+                    <label>使用预设背景</label>
+                    <div class="preset-backgrounds">
+                        <button class="preset-btn" onclick="setPresetBackground(1)">预设1</button>
+                        <button class="preset-btn" onclick="setPresetBackground(2)">预设2</button>
+                        <button class="preset-btn" onclick="setPresetBackground(3)">预设3</button>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <label>或使用自定义图片URL</label>
+                    <input type="text" id="custom-bg-url" placeholder="输入图片URL...">
+                    <div style="margin-top: 10px;">
+                        <button class="btn-primary" onclick="setCustomBackground()">应用自定义背景</button>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <label>上传本地图片</label>
+                    <input type="file" id="local-bg-file" accept="image/*" style="margin-bottom: 10px;">
+                    <div style="margin-top: 10px;">
+                        <button class="btn-primary" onclick="uploadLocalBackground()">上传并应用本地背景</button>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <button class="btn-secondary" onclick="resetBackground()">重置为默认背景</button>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('background-modal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
