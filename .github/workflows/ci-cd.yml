@@ -56,27 +56,25 @@ jobs:
         python -c "import app; print('app imports successfully')"
         python -c "from core import bili_api, database, logger, notifier, scheduler; print('core modules import successfully')"
     
-    - name: Run Flask app test
+    - name: Run Flask app test (Windows)
+      if: matrix.os == 'windows-latest'
       run: |
-        if [ "${{ matrix.os }}" = "windows-latest" ]; then
-          powershell -Command "
-          `$process = Start-Process python -ArgumentList '-c', 'from app import app; with app.test_client() as client: response = client.get(\'/\'); print(\"Flask app responds with status:\", response.status_code)' -NoNewWindow -PassThru
-          `$process.WaitForExit(30000)
-          if (!`$process.HasExited) {
-              `$process.Kill()
-              Write-Host 'Flask test timed out'
-          } else {
-              Write-Host 'Flask test completed'
-          }
-          "
-        else
-          timeout 30s python -c "
-          from app import app
-          with app.test_client() as client:
-              response = client.get('/')
-              print('Flask app responds with status:', response.status_code)
-          " || echo "Flask test completed (may have timed out)"
-        fi
+        python -c "
+        from app import app
+        with app.test_client() as client:
+            response = client.get('/')
+            print('Flask app responds with status:', response.status_code)
+        "
+    
+    - name: Run Flask app test (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        timeout 30s python -c "
+        from app import app
+        with app.test_client() as client:
+            response = client.get('/')
+            print('Flask app responds with status:', response.status_code)
+        " || echo "Flask test completed (may have timed out)"
     
     - name: Test database functionality
       run: |
