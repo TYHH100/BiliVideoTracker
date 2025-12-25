@@ -12,66 +12,61 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 class TestBasicImports(unittest.TestCase):
-    """测试基本导入功能"""
-
+    """Test basic import functionality"""
+    
     def test_app_import(self):
-        """测试app模块导入"""
+        """Test app module import"""
         try:
             import app
-
-            self.assertTrue(hasattr(app, "app"))
-            print("✓ app模块导入成功")
+            self.assertTrue(hasattr(app, 'app'))
+            print("✓ app module imported successfully")
         except ImportError as e:
-            self.fail(f"app模块导入失败: {e}")
-
+            self.fail(f"app module import failed: {e}")
+    
     def test_core_modules_import(self):
-        """测试core模块导入"""
-        modules = ["bili_api", "database", "logger", "notifier", "scheduler"]
-
+        """Test core modules import"""
+        modules = ['bili_api', 'database', 'logger', 'notifier', 'scheduler']
+        
         for module_name in modules:
             try:
-                module = __import__(f"core.{module_name}", fromlist=[module_name])
+                module = __import__(f'core.{module_name}', fromlist=[module_name])
                 self.assertIsNotNone(module)
-                print(f"✓ core.{module_name}模块导入成功")
+                print(f"✓ core.{module_name} module imported successfully")
             except ImportError as e:
-                self.fail(f"core.{module_name}模块导入失败: {e}")
-
+                self.fail(f"core.{module_name} module import failed: {e}")
+    
     def test_flask_app_creation(self):
-        """测试Flask应用创建"""
+        """Test Flask app creation"""
         try:
             from app import app
-
-            self.assertTrue(hasattr(app, "test_client"))
-            print("✓ Flask应用创建成功")
+            self.assertTrue(hasattr(app, 'test_client'))
+            print("✓ Flask app created successfully")
         except Exception as e:
-            self.fail(f"Flask应用创建失败: {e}")
-
+            self.fail(f"Flask app creation failed: {e}")
 
 class TestFunctionality(unittest.TestCase):
-    """测试基本功能"""
-
+    """Test basic functionality"""
+    
     def test_database_module(self):
-        """测试数据库模块"""
+        """Test database module"""
         try:
             import core.database as db
-
-            # 检查是否有基本的数据库函数
-            self.assertTrue(hasattr(db, "init_dbs"))
-            self.assertTrue(hasattr(db, "SQLiteConnectionPool"))
-            print("✓ 数据库模块功能正常")
+            # Check for basic database functions
+            self.assertTrue(hasattr(db, 'init_dbs'))
+            self.assertTrue(hasattr(db, 'SQLiteConnectionPool'))
+            print("✓ Database module functions correctly")
         except Exception as e:
-            self.fail(f"数据库模块测试失败: {e}")
-
+            self.fail(f"Database module test failed: {e}")
+    
     def test_bili_api_module(self):
-        """测试BiliAPI模块"""
+        """Test BiliAPI module"""
         try:
             from core.bili_api import BiliAPI
-
             api = BiliAPI()
             self.assertIsNotNone(api)
-            print("✓ BiliAPI模块功能正常")
+            print("✓ BiliAPI module functions correctly")
         except Exception as e:
-            self.fail(f"BiliAPI模块测试失败: {e}")
+            self.fail(f"BiliAPI module test failed: {e}")
 
 
 def run_tests():
@@ -79,29 +74,36 @@ def run_tests():
     # 创建测试套件
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
-
+    
     # 添加测试类
     suite.addTests(loader.loadTestsFromTestCase(TestBasicImports))
     suite.addTests(loader.loadTestsFromTestCase(TestFunctionality))
-
+    
     # 运行测试
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
-
+    
     # 返回测试结果
     return result.wasSuccessful()
 
-
-if __name__ == "__main__":
-    print("运行BiliVideoTracker基本测试...")
+if __name__ == '__main__':
+    # 设置编码以支持中文字符
+    import io
+    import sys
+    
+    # 对于Windows环境，设置标准输出的编码
+    if sys.platform == "win32":
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    
+    print("Running BiliVideoTracker basic tests...")
     print("=" * 50)
-
+    
     success = run_tests()
-
+    
     print("=" * 50)
     if success:
-        print("✓ 所有测试通过!")
+        print("✓ All tests passed!")
         sys.exit(0)
     else:
-        print("✗ 部分测试失败!")
+        print("✗ Some tests failed!")
         sys.exit(1)
