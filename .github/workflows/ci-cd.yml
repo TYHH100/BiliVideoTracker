@@ -41,8 +41,13 @@ jobs:
     - name: Run basic syntax checks
       run: |
         python -m py_compile app.py
-        python -m py_compile core/*.py
         python -m py_compile test_basic.py
+        # 检查core目录下的所有Python文件
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          powershell -Command "Get-ChildItem core/*.py | ForEach-Object { python -m py_compile $_.FullName }"
+        else
+          python -m py_compile core/*.py
+        fi
     
     - name: Run unit tests
       run: |
