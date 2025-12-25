@@ -2,13 +2,11 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ actions-Test ]
+    branches: [ main ]
   pull_request:
-    branches: [ actions-Test ]
+    branches: [ main ]
   release:
     types: [ published ]
-  schedule:
-    - cron: '0 0 * * 0'  # 每周日运行一次
 
 env:
   PYTHON_VERSION: '3.10'
