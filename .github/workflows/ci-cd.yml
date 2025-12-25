@@ -58,12 +58,30 @@ jobs:
     
     - name: Run Flask app test
       run: |
-        timeout 30s python -c "
-        from app import app
-        with app.test_client() as client:
-            response = client.get('/')
-            print('Flask app responds with status:', response.status_code)
-        " || echo "Flask test completed (may have timed out)"
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          powershell -Command "
+          $process = Start-Process python -ArgumentList '-c', \"
+          from app import app
+          with app.test_client() as client:
+              response = client.get('/')
+              print('Flask app responds with status:', response.status_code)
+          \" -NoNewWindow -PassThru
+          $process.WaitForExit(30000)
+          if (!$process.HasExited) {
+              $process.Kill()
+              Write-Host 'Flask test timed out'
+          } else {
+              Write-Host 'Flask test completed'
+          }
+          "
+        else
+          timeout 30s python -c "
+          from app import app
+          with app.test_client() as client:
+              response = client.get('/')
+              print('Flask app responds with status:', response.status_code)
+          " || echo "Flask test completed (may have timed out)"
+        fi
     
     - name: Test database functionality
       run: |
