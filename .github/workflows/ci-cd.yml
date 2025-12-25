@@ -12,6 +12,7 @@ on:
 
 env:
   PYTHON_VERSION: '3.10'
+  PYTHONUTF8: 1
 
 jobs:
   test:
