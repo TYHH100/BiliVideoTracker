@@ -168,25 +168,11 @@ def check_updates_job():
 
     # 检查是否有集中发送的更新信息
     if batch_updates and settings.get("smtp_enable") == "1":
-        # 构建集中发送的邮件内容
-        total_updates = sum(update["diff"] for update in batch_updates)
-        subject = f"[统一推送] 共检测到 {len(batch_updates)} 个合集更新，新增 {total_updates} 个视频"
-        debug_log(
-            f"[SCHEDULER] 统一推送更新通知 - 合集数: {len(batch_updates)}, 总视频数: {total_updates}"
-        )
-
-        # 构建批量邮件的HTML内容
-        batch_content = f"""
-        <h2>B站合集监控统一推送通知</h2>
-        <p><b>总更新合集数:</b> {len(batch_updates)}</p>
-        <p><b>总更新视频数:</b> {total_updates}</p>
-        <p><b>检查时间:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        <hr>
-        """
-
-        # 添加每个更新的详细信息
-        for update in batch_updates:
-            batch_content += f"""
+        # 如果只有1个更新，采用常规发送方式
+        if len(batch_updates) == 1:
+            update = batch_updates[0]
+            subject = f"【更新】{update['name']} 更新了 {update['diff']} 个视频"
+            content = f"""
             <h3>{update['name']}</h3>
             <p><b>更新数量:</b> {update['diff']}</p>
             <p><b>当前总数:</b> {update['remote_total']}</p>
@@ -195,15 +181,50 @@ def check_updates_job():
             {update['videos_html']}
             <h4>合集链接：</h4>
             <p><a href="https://space.bilibili.com/{update['mid']}/lists/{update['remote_id']}?type={update['type']}">点击查看合集/系列</a></p>
+            """
+            
+            debug_log(f"[SCHEDULER] 只有1个更新，采用常规发送方式")
+            debug_log(f"[SCHEDULER] 邮件主题: {subject}")
+            debug_log(f"[SCHEDULER] 邮件内容预览: {content[:200]}...")
+            send_notification(settings, subject, content)
+        else:
+            # 有2个或更多更新，采用统一发送方式
+            # 构建集中发送的邮件内容
+            total_updates = sum(update["diff"] for update in batch_updates)
+            subject = f"[统一推送] 共检测到 {len(batch_updates)} 个合集更新，新增 {total_updates} 个视频"
+            debug_log(
+                f"[SCHEDULER] 统一推送更新通知 - 合集数: {len(batch_updates)}, 总视频数: {total_updates}"
+            )
+
+            # 构建批量邮件的HTML内容
+            batch_content = f"""
+            <h2>B站合集监控统一推送通知</h2>
+            <p><b>总更新合集数:</b> {len(batch_updates)}</p>
+            <p><b>总更新视频数:</b> {total_updates}</p>
+            <p><b>检查时间:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
             <hr>
             """
 
-        # 发送批量更新邮件
-        debug_log(f"[SCHEDULER] 发送批量更新邮件")
-        debug_log(f"[SCHEDULER] 批量邮件主题: {subject}")
-        debug_log(f"[SCHEDULER] 批量邮件内容长度: {len(batch_content)} 字符")
-        debug_log(f"[SCHEDULER] 批量邮件内容预览: {batch_content[:300]}...")
-        send_notification(settings, subject, batch_content)
+            # 添加每个更新的详细信息
+            for update in batch_updates:
+                batch_content += f"""
+                <h3>{update['name']}</h3>
+                <p><b>更新数量:</b> {update['diff']}</p>
+                <p><b>当前总数:</b> {update['remote_total']}</p>
+                <p><b>更新时间:</b> {update['update_time'].strftime('%Y-%m-%d %H:%M')}</p>
+                <h4>最新视频：</h4>
+                {update['videos_html']}
+                <h4>合集链接：</h4>
+                <p><a href="https://space.bilibili.com/{update['mid']}/lists/{update['remote_id']}?type={update['type']}">点击查看合集/系列</a></p>
+                <hr>
+                """
+
+            # 发送批量更新邮件
+            debug_log(f"[SCHEDULER] 发送批量更新邮件")
+            debug_log(f"[SCHEDULER] 批量邮件主题: {subject}")
+            debug_log(f"[SCHEDULER] 批量邮件内容长度: {len(batch_content)} 字符")
+            debug_log(f"[SCHEDULER] 批量邮件内容预览: {batch_content[:300]}...")
+            send_notification(settings, subject, batch_content)
 
     # 计算下一次检查时间，使用与实际调度相同的全局冷却时间配置
     global_cooldown = int(
