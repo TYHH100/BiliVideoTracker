@@ -4,3 +4,4 @@ APScheduler
 bcrypt
 pyinstaller
 Pillow
+cryptography

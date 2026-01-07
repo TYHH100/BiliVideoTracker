@@ -301,19 +301,23 @@ def import_old_monitor_data():
     data = request.json.get("data")
     if not data or not data.get("seasons"):
         return jsonify({"code": 1, "msg": "无效的数据格式"})
+    
+    seasons = data["seasons"]
+    if len(seasons) > 100:
+        return jsonify({"code": 1, "msg": "单次导入不得超过100条"}), 400
 
     imported_count = 0
 
     for item in data["seasons"]:
         # 转换旧版格式到新版数据库格式
         monitor_data = {
-            "mid": item.get("mid", ""),
-            "remote_id": item.get("series_id", item.get("season_id", "")),
-            "type": item.get("type", "series"),
-            "name": item.get("name", ""),
-            "cover": item.get("cover", ""),
+            "mid": str(item.get("mid", ""))[:25],
+            "remote_id": str(item.get("series_id", item.get("season_id", "")))[:25],
+            "type": item.get("type", "season"),
+            "name": str(item.get("title", "未命名"))[:200],
+            "cover": str(item.get("cover", ""))[:500],
             "total": item.get("total", item.get("last_episode_count", 0)),
-            "desc": "",  # 旧版没有desc字段
+            "desc": str(item.get("desc", ""))[:500],
         }
 
         if not monitor_data["mid"] or not monitor_data["remote_id"]:
@@ -403,8 +407,8 @@ def batch_get_monitor_update_stats():
             return jsonify({"code": 400, "msg": "无效的监控项ID列表"}), 400
 
         # 限制批量请求数量，避免过度消耗资源
-        if len(monitor_ids) > 50:
-            return jsonify({"code": 400, "msg": "批量请求数量不能超过50个"}), 400
+        #if len(monitor_ids) > 50:
+        #    return jsonify({"code": 400, "msg": "批量请求数量不能超过50个"}), 400
 
         # 批量获取统计信息
         stats = db.get_batch_monitor_update_stats(monitor_ids)
@@ -541,7 +545,7 @@ from PIL import Image
 from core import logger
 
 
-# --- 图片反代 (绕过B站防盗链) ---
+# --- 图片反代 ---
 @app.route("/proxy/image")
 def proxy_image():
     """图片代理，解决跨域问题并实现服务器端与客户端双重缓存
@@ -551,17 +555,25 @@ def proxy_image():
     try:
         image_url = request.args.get("url")
         if not image_url:
-            return jsonify({"error": "缺少图片URL参数"}), 400
+            return "Missing URL", 400
+        
+        # 解析URL以进行安全检查
+        parsed_url = urlparse(image_url)
+        
+        # 1. 检查域名是否允许
+        allowed_domains = ["i0.hdslb.com", "i1.hdslb.com", "i2.hdslb.com", "archive.biliimg.com"]
+        if parsed_url.netloc not in allowed_domains:
+            logger.warning(f"检测到非法SSRF尝试: {image_url}")
+            return "Forbidden Domain", 403
 
-        # 验证URL格式
-        if not image_url.startswith(("http://", "https://")):
-            return jsonify({"error": "无效的URL格式"}), 400
+        # 2. 检查协议是否是HTTP或HTTPS
+        if parsed_url.scheme not in ("http", "https"):
+            return "Invalid URL scheme", 400
 
         # 生成基于图片URL的唯一缓存文件名
         url_hash = hashlib.md5(image_url.encode("utf-8")).hexdigest()
 
         # 获取文件扩展名
-        parsed_url = urlparse(image_url)
         ext = parsed_url.path.split(".")[-1] if "." in parsed_url.path else "jpg"
 
         # 确保扩展名长度合理
@@ -604,9 +616,7 @@ def proxy_image():
                     "Cache-Control": "public, max-age=86400",  # 缓存1天
                     "Access-Control-Allow-Origin": "*",  # 允许跨域访问
                     "ETag": etag,  # 图片内容的唯一标识
-                    "Last-Modified": os.path.getmtime(
-                        webp_cache_filename
-                    ),  # 使用缓存文件的修改时间
+                    "Last-Modified": str(os.path.getmtime(webp_cache_filename)),  # 使用缓存文件的修改时间（字符串）
                 },
             )
         elif os.path.exists(cache_filename):
@@ -646,9 +656,7 @@ def proxy_image():
                     "Cache-Control": "public, max-age=86400",  # 缓存1天，避免长时间缓存过期图片
                     "Access-Control-Allow-Origin": "*",  # 允许跨域访问
                     "ETag": etag,  # 图片内容的唯一标识
-                    "Last-Modified": os.path.getmtime(
-                        cache_filename
-                    ),  # 使用缓存文件的修改时间
+                    "Last-Modified": str(os.path.getmtime(cache_filename)),  # 使用缓存文件的修改时间（字符串）
                 },
             )
 
@@ -666,7 +674,7 @@ def proxy_image():
 
         # 发送请求获取图片，添加超时和重试机制
         try:
-            response = requests.get(image_url, headers=headers, timeout=15, stream=True)
+            response = requests.get(image_url, headers=headers, timeout=5, stream=True)
             response.raise_for_status()
         except requests.exceptions.Timeout:
             logger.error(f"图片请求超时: {image_url}")
@@ -745,7 +753,7 @@ def proxy_image():
                     "Cache-Control": "public, max-age=86400",  # 缓存1天
                     "Access-Control-Allow-Origin": "*",  # 允许跨域访问
                     "ETag": webp_etag,  # 图片内容的唯一标识
-                    "Last-Modified": time.time(),  # 使用当前时间
+                    "Last-Modified": str(time.time()),  # 使用当前时间（字符串）
                 },
             )
 
@@ -757,7 +765,7 @@ def proxy_image():
                 "Cache-Control": "public, max-age=86400",  # 缓存1天
                 "Access-Control-Allow-Origin": "*",  # 允许跨域访问
                 "ETag": etag,  # 图片内容的唯一标识
-                "Last-Modified": time.time(),  # 使用当前时间
+                "Last-Modified": str(time.time()),  # 使用当前时间（字符串）
             },
         )
 
@@ -832,7 +840,8 @@ def upload_background():
 @app.route("/uploads/<path:filename>")
 def serve_uploads(filename):
     """提供上传文件的静态访问"""
-    return send_from_directory(uploads_dir, filename)
+    safe_filename = os.path.basename(filename)
+    return send_from_directory(uploads_dir, safe_filename)
 
 
 @app.route("/api/monitor/archive", methods=["POST"])

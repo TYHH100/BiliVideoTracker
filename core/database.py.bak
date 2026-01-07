@@ -831,3 +831,49 @@ def _calculate_update_stats(monitor_id, publish_times):
         "last_update_time": last_update_time,
         "intervals_count": len(intervals),
     }
+
+def migrate_plaintext_to_encrypted():
+    """将数据库中的明文数据迁移为加密数据"""
+    debug_log(f"[DB] 开始数据迁移：明文 -> 加密")
+    
+    # 需要处理的表字段映射
+    migration_map = [
+        settings.get("email_auth_code"),
+        # 未来可以添加更多需要加密的字段
+    ]
+    
+    conn = data_pool.get_connection()
+    try:
+        c = conn.cursor()
+        
+        for table_name, column_name in migration_map:
+            debug_log(f"[DB] 迁移 {table_name}.{column_name}")
+            
+            # 获取该表的所有行
+            c.execute(f"SELECT rowid, {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL AND {column_name} != ''")
+            rows = c.fetchall()
+            
+            for row in rows:
+                rowid, value = row
+                try:
+                    # 尝试解密，如果失败说明是明文
+                    FERNET.decrypt(value.encode())
+                    # 如果成功，说明已经是加密数据，跳过
+                    debug_log(f"[DB] 行 {rowid}: 已是加密数据，跳过")
+                except (InvalidToken, cryptography.fernet.InvalidToken):
+                    # 解密失败，是明文，需要加密
+                    debug_log(f"[DB] 行 {rowid}: 发现明文，进行加密")
+                    encrypted_value = encrypt_data(value)
+                    c.execute(
+                        f"UPDATE {table_name} SET {column_name}=? WHERE rowid=?",
+                        (encrypted_value, rowid)
+                    )
+                    logger.info(f"迁移: {table_name}.{column_name} 行 {rowid}: 明文 -> 加密")
+                except Exception as e:
+                    logger.error(f"迁移 {table_name}.{column_name} 行 {rowid} 时出错: {e}")
+        
+        conn.commit()
+        logger.info("数据迁移完成")
+        debug_log(f"[DB] 数据迁移完成")
+    finally:
+        data_pool.return_connection(conn)
