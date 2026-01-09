@@ -2,14 +2,13 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    tags:
+      - 'v*'
   release:
-    types: [ published ]
+    types: [published]
 
 env:
-  PYTHON_VERSION: '3.10'
+  PYTHON_VERSION: '3.11'
   PYTHONUTF8: 1
 
 jobs:
@@ -245,12 +244,10 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag_name: ${{github.ref_name}}
+        name: Releases ${{github.ref_name}}
         files: |
           dist/windows/*
           dist/linux/*
           dist/macos/*
-        generate_release_notes: true
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

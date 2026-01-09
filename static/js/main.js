@@ -303,7 +303,6 @@ function handleLogin() {
 
 function showAuthError(msg) {
     document.getElementById('auth-msg').textContent = msg;
-    document.getElementById('auth-modal').classList.add('active');
 }
 
 function logout() {
@@ -632,20 +631,55 @@ function renderUpdateStats(monitorId, stats) {
         
         let statsHtml = '';
         
+        // 添加距离上次更新时间的显示
+        let timeSinceUpdateText = '';
+        if (stats.last_update_time) {
+            if (stats.days_since_last_update !== null) {
+                if (stats.days_since_last_update > 0) {
+                    timeSinceUpdateText = `${stats.days_since_last_update}天${stats.hours_since_last_update}小时`;
+                } else if (stats.hours_since_last_update > 0) {
+                    timeSinceUpdateText = `${stats.hours_since_last_update}小时${stats.minutes_since_last_update}分钟`;
+                } else {
+                    timeSinceUpdateText = `${stats.minutes_since_last_update}分钟`;
+                }
+            } else {
+                timeSinceUpdateText = new Date(stats.last_update_time * 1000).toLocaleString();
+            }
+        }
+        
         if (stats.average_interval_days !== null && stats.next_update_prediction !== null) {
             const nextUpdateTime = new Date(stats.next_update_prediction * 1000).toLocaleDateString();
             statsHtml = `
                 <div class="stats-item">
-                    <span class="stats-label">平均更新间隔:</span>
+                    <span class="stats-label">距离上次更新过去了:</span>
+                    <span class="stats-value">${timeSinceUpdateText}</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">平均更新间隔[仅供参考]:</span>
                     <span class="stats-value">${stats.average_interval_days}天</span>
                 </div>
                 <div class="stats-item">
-                    <span class="stats-label">推测下次更新[注:图一乐就行]:</span>
+                    <span class="stats-label">推测下次更新[图一乐就行]:</span>
                     <span class="stats-value">${nextUpdateTime}</span>
                 </div>
                 <div class="stats-item">
                     <span class="stats-label">数据库已记录更新视频:</span>
                     <span class="stats-value">${stats.total_videos}个</span>
+                </div>
+            `;
+        } else if (stats.last_update_time) {
+            // 只有上次更新时间，没有足够数据预测下次更新
+            statsHtml = `
+                <div class="stats-item">
+                    <span class="stats-label">距离上次更新过去了:</span>
+                    <span class="stats-value">${timeSinceUpdateText}</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">数据库已记录更新视频:</span>
+                    <span class="stats-value">${stats.total_videos}个</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">更新数据不足，无法预测下次更新时间</span>
                 </div>
             `;
         } else {
@@ -756,7 +790,7 @@ function openVideo(videoId) {
 async function controlMonitor(action) {
     const res = await fetchAPI('/control', 'POST', { action });
     if (res && res.code === 0) {
-        if(action === 'check_now') alert('已触发立即检查');
+        if(action === 'check_now') showNotification('操作成功', '已触发立即检查', 'success');
         loadStatus(); // 刷新状态
         refreshRecentUpdates(); // 刷新最近更新
     }
@@ -785,7 +819,7 @@ async function submitAddMonitor() {
         document.getElementById('add-url-input').value = '';
         
         // 添加一个短暂的延迟，确保后台线程有足够的时间来完成监控项的添加和数据的获取
-        alert('添加成功！正在获取最新信息，请稍候...');
+        showNotification('添加成功', '正在获取最新信息，请稍候...', 'success');
         setTimeout(() => {
             loadMonitors();
         }, 1000);
@@ -805,10 +839,10 @@ async function toggleMonitorActive(id, isActive) {
     if (!confirm(`确定要${action}监控项吗？`)) return;
     const res = await fetchAPI('/monitor/toggle_active', 'POST', { id, is_active: isActive ? 0 : 1 });
     if (res && res.code === 0) {
-        alert(res.msg);
+        showNotification('操作成功', res.msg, 'success');
         loadMonitors();
     } else {
-        alert(res.msg || '操作失败');
+        showNotification('操作失败', res.msg || '操作失败', 'error');
     }
 }
 
@@ -819,10 +853,10 @@ async function toggleArchive(id, archived) {
     
     const res = await fetchAPI('/monitor/archive', 'POST', { id, archived });
     if (res && res.code === 0) {
-        alert(res.msg);
+        showNotification('操作成功', res.msg, 'success');
         loadMonitors();
     } else {
-        alert(res.msg || '操作失败');
+        showNotification('操作失败', res.msg || '操作失败', 'error');
     }
 }
 
@@ -894,7 +928,7 @@ async function saveSettings() {
     if (res && res.code === 0) {
         // 无论debug模式是启用还是禁用，都立即应用
         await fetchAPI('/debug/set', 'POST', { enable: data.debug_mode === '1' });
-        alert('设置已保存');
+        showNotification('操作成功', '设置已保存', 'success');
     }
 }
 
@@ -911,12 +945,12 @@ async function testEmail() {
         use_tls: document.getElementById('set-use-tls').checked ? '1' : '0'
     };
     if(!data.email_account || !data.email_auth_code) {
-        alert('请先填写邮箱账号和授权码');
+        showNotification('输入错误', '请先填写邮箱账号和授权码', 'error');
         return;
     }
-    alert('正在发送测试邮件，请稍候...');
+    showNotification('提示', '正在发送测试邮件，请稍候...', 'info');
     const res = await fetchAPI('/settings/email_test', 'POST', data);
-    if(res) alert(res.msg);
+    if(res) showNotification('邮件测试结果', res.msg, res.code === 0 ? 'success' : 'error');
 }
 
 async function resetToken() {
@@ -934,12 +968,12 @@ async function importOldMonitors() {
     const file = fileInput.files[0];
     
     if (!file) {
-        alert('请先选择要导入的JSON文件');
+        showNotification('导入错误', '请先选择要导入的JSON文件', 'error');
         return;
     }
     
     if (!file.name.endsWith('.json')) {
-        alert('请选择有效的JSON文件');
+        showNotification('导入错误', '请选择有效的JSON文件', 'error');
         return;
     }
     
@@ -951,7 +985,7 @@ async function importOldMonitors() {
                 
                 // 验证JSON结构
                 if (!jsonData.seasons || !Array.isArray(jsonData.seasons)) {
-                    alert('JSON文件结构不正确，缺少seasons数组');
+                    showNotification('导入错误', 'JSON文件结构不正确，缺少seasons数组', 'error');
                     return;
                 }
                 
@@ -964,22 +998,71 @@ async function importOldMonitors() {
                 const res = await fetchAPI('/monitor/import_old', 'POST', { data: jsonData });
                 
                 if (res && res.code === 0) {
-                    alert(`成功导入 ${res.imported} 个监控项！`);
+                    showNotification('导入成功', `成功导入 ${res.imported} 个监控项！`, 'success');
                     loadMonitors(); // 刷新监控列表
                     // 清空文件选择
                     fileInput.value = '';
                 } else {
-                    alert('导入失败：' + (res?.msg || '未知错误'));
+                    showNotification('导入失败', '导入失败：' + (res?.msg || '未知错误'), 'error');
                 }
             } catch (parseError) {
-                alert('JSON解析失败：' + parseError.message);
+                showNotification('JSON解析失败', 'JSON解析失败：' + parseError.message, 'error');
             }
         };
         
         reader.readAsText(file);
     } catch (error) {
-        alert('文件读取失败：' + error.message);
+        showNotification('文件读取失败', '文件读取失败：' + error.message, 'error');
     }
+}
+
+function showNotification(title, message, type = 'info', duration = 5000) {
+    // 检查并创建通知容器
+    let container = document.querySelector('.notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+    }
+    
+    // 创建通知元素
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    // 构建通知内容
+    notification.innerHTML = `
+        <div class="notification-icon">
+            ${type === 'success' ? '✓' : type === 'error' ? '✗' : type === 'warning' ? '⚠' : 'ℹ'}
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+    
+    // 添加到容器（新通知显示在最上方）
+    container.prepend(notification);
+    
+    // 激活通知
+    setTimeout(() => {
+        notification.classList.add('active');
+    }, 10);
+    
+    // 自动关闭
+    setTimeout(() => {
+        notification.classList.remove('active');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+                
+                // 如果容器为空，移除容器
+                if (container.children.length === 0) {
+                    container.remove();
+                }
+            }
+        }, 400);
+    }, duration);
 }
 
 // --- 工具函数 ---
@@ -1092,7 +1175,7 @@ async function setCustomBackground() {
             closeModal('background-modal');
             urlInput.value = '';
         } else {
-            alert('请输入有效的图片URL（必须以http://或https://开头）');
+            showNotification('输入错误', '请输入有效的图片URL（必须以http://或https://开头）', 'error');
         }
     }
 }
@@ -1103,20 +1186,20 @@ async function uploadLocalBackground() {
     const file = fileInput.files[0];
     
     if (!file) {
-        alert('请先选择一个本地图片文件');
+        showNotification('上传错误', '请先选择一个本地图片文件', 'error');
         return;
     }
     
     // 检查文件类型
     if (!file.type.match('image.*')) {
-        alert('请选择一个有效的图片文件');
+        showNotification('上传错误', '请选择一个有效的图片文件', 'error');
         return;
     }
     
     // 检查文件大小（限制在10MB以内）
     const maxSize = 10 * 1024 * 1024; // 10MB
     if (file.size > maxSize) {
-        alert('图片文件过大，请选择小于10MB的图片');
+        showNotification('上传错误', '图片文件过大, 请选择小于10MB的图片', 'error');
         return;
     }
     
@@ -1140,13 +1223,13 @@ async function uploadLocalBackground() {
             // 上传成功，设置新背景
             setBackground(data.url);
             closeModal('background-modal');
-            alert('背景图片上传成功！');
+            showNotification('上传成功', '背景图片上传成功！', 'success');
         } else {
-            alert('上传失败：' + (data.msg || '未知错误'));
+            showNotification('上传失败', '上传失败：' + (data.msg || '未知错误'), 'error');
         }
     } catch (e) {
         console.error('上传错误:', e);
-        alert('上传失败：网络错误');
+        showNotification('上传失败', '上传失败：网络错误', 'error');
     } finally {
         // 清空文件输入
         fileInput.value = '';

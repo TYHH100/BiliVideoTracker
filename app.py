@@ -110,8 +110,13 @@ def check_auth():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
-
+    try:
+        with open("version", "r") as f:
+            version = f.read().strip()
+    except Exception as e:
+        logger.error(f"读取版本文件失败: {e}")
+        version = ""
+    return render_template("index.html", version=version)
 
 @app.route("/api/public/status", methods=["GET"])
 def get_public_status():

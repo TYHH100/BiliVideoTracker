@@ -9,7 +9,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('templates', 'templates'),
-        ('static', 'static')
+        ('static', 'static'),
+        ('version', '.')
     ],
     hiddenimports=['sqlite3', 'email.mime.text', 'email.header', 'bcrypt'],
     hookspath=[],
@@ -44,4 +45,4 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
-
+

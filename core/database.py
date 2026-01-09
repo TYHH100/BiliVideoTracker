@@ -306,25 +306,25 @@ def init_dbs():
 
         # 初始化默认设置
         default_settings = {
-            "smtp_enable": "0",
-            "smtp_server": "smtp.163.com",
-            "smtp_port": "465",
-            "email_account": "",
-            "email_auth_code": "",
-            "sender_name": "B站合集监控",
-            "receiver_emails": "",
-            "use_tls": "1",
-            "smtp_batch_send": "0",  # 集中发送邮件开关 (0=关闭, 1=开启)
-            "monitor_active": "0",  # 全局监控开关
-            "next_check_time": "未调度",
-            "server_host": "127.0.0.1",  # 服务器IP地址
-            "server_port": "5000",  # 服务器端口号
-            "recent_updates_limit": "10",  # 前端显示的最近更新视频数量限制
-            "recent_updates_save_limit": "30",  # 后端保存的最近更新视频数量限制
-            "log_auto_clean": "1",  # 日志自动清理开关 (0=关闭, 1=开启)
-            "log_retention_days": "7",  # 日志保留天数
-            #'log_max_size_mb': '100' # 日志文件最大大小 (MB)
-            "debug_mode": "0",  # Debug模式开关 (0=关闭, 1=开启)
+            "smtp_enable": "0",                 # 是否启用SMTP发送邮件 (0=关闭, 1=开启)
+            "smtp_server": "smtp.163.com",      # 邮箱SMTP服务器地址
+            "smtp_port": "465",                 # 邮箱SMTP端口号
+            "email_account": "",                # 邮箱账号
+            "email_auth_code": "",              # 邮箱授权码
+            "sender_name": "B站合集监控",        # 发送人名称
+            "receiver_emails": "",              # 接收人邮箱，多个邮箱用逗号分隔
+            "use_tls": "1",                     # 是否使用TLS加密 (0=关闭, 1=开启)
+            "smtp_batch_send": "0",             # 集中发送邮件开关 (0=关闭, 1=开启)
+            "monitor_active": "0",              # 全局监控开关 (0=关闭, 1=开启)
+            "next_check_time": "未调度",         # 下一次检查时间
+            "server_host": "127.0.0.1",         # 服务器IP地址
+            "server_port": "5000",              # 服务器端口号
+            "recent_updates_limit": "10",       # 前端显示的最近更新视频数量限制
+            "recent_updates_save_limit": "500", # 后端保存的最近更新视频数量限制
+            "log_auto_clean": "1",              # 日志自动清理开关 (0=关闭, 1=开启)
+            "log_retention_days": "7",          # 日志保留天数
+            #'log_max_size_mb': '100'           # 日志文件最大大小 (MB)
+            "debug_mode": "0",                  # Debug模式开关 (0=关闭, 1=开启)
         }
 
         # 获取当前数据库中的所有设置
@@ -797,6 +797,21 @@ def get_batch_monitor_update_stats(monitor_ids):
 
 def _calculate_update_stats(monitor_id, publish_times):
     """计算单个监控项的更新统计信息"""
+    current_time = time.time()
+    last_update_time = publish_times[0] if publish_times else None
+    days_since_last_update = None
+    hours_since_last_update = None
+    minutes_since_last_update = None
+    
+    # 计算距离上次更新的时间
+    if last_update_time:
+        time_diff = current_time - last_update_time
+        days_since_last_update = int(time_diff // (24 * 3600))
+        remaining_hours = time_diff % (24 * 3600)
+        hours_since_last_update = int(remaining_hours // 3600)
+        remaining_minutes = remaining_hours % 3600
+        minutes_since_last_update = int(remaining_minutes // 60)
+
     if len(publish_times) < 2:
         # 如果视频数量不足2个，无法计算间隔
         debug_log(
@@ -806,7 +821,10 @@ def _calculate_update_stats(monitor_id, publish_times):
             "average_interval_days": None,
             "next_update_prediction": None,
             "total_videos": len(publish_times),
-            "last_update_time": publish_times[0] if publish_times else None,
+            "last_update_time": last_update_time,
+            "days_since_last_update": days_since_last_update,
+            "hours_since_last_update": hours_since_last_update,
+            "minutes_since_last_update": minutes_since_last_update,
         }
 
     # 计算相邻视频发布的时间间隔（单位：天）
@@ -821,7 +839,6 @@ def _calculate_update_stats(monitor_id, publish_times):
     average_interval = sum(intervals) / len(intervals)
 
     # 推测下一次更新时间（基于最近一次发布时间 + 平均间隔）
-    last_update_time = publish_times[0]
     next_update_prediction = last_update_time + (average_interval * 24 * 3600)
 
     return {
@@ -829,5 +846,8 @@ def _calculate_update_stats(monitor_id, publish_times):
         "next_update_prediction": int(next_update_prediction),
         "total_videos": len(publish_times),
         "last_update_time": last_update_time,
+        "days_since_last_update": days_since_last_update,
+        "hours_since_last_update": hours_since_last_update,
+        "minutes_since_last_update": minutes_since_last_update,
         "intervals_count": len(intervals),
     }
