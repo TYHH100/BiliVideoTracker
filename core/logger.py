@@ -66,7 +66,7 @@ def init_logger():
     debug_handler = logging.FileHandler(debug_file, encoding="utf-8")
     debug_handler.setLevel(logging.DEBUG)
     debug_formatter = logging.Formatter(
-        "[%(asctime)s][%(name)s][%(module)s][%(funcName)s][%(levelname)s] - %(message)s"
+        "[%(asctime)s][%(name)s][%(levelname)s] - %(message)s"
     )
     debug_handler.setFormatter(debug_formatter)
     debug_logger.addHandler(debug_handler)

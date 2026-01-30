@@ -1,4 +1,7 @@
 import datetime
+import json
+import os
+import sys
 import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -7,6 +10,88 @@ import core.database as db
 from core import daily_log_maintenance, debug_log, logger
 from core.bili_api import BiliAPI
 from core.notifier import send_notification
+
+# 确定数据目录路径 (兼容 PyInstaller 打包后的路径)
+if getattr(sys, "frozen", False):
+    # 打包后的环境，使用程序所在目录
+    BASE_DIR = os.path.dirname(sys.executable)
+    DATA_DIR = os.path.join(BASE_DIR, "data")
+else:
+    # 开发环境
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# 确保数据目录存在
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+# 检查缓存文件路径
+CHECKED_CACHE_FILE = os.path.join(DATA_DIR, 'checked_monitors.json')
+
+# 缓存过期时间（秒）
+CACHE_EXPIRY = 2700  # 45分钟
+
+
+
+# 加载已检查的监控项缓存
+def load_checked_cache():
+    """加载已检查的监控项缓存"""
+    try:
+        if os.path.exists(CHECKED_CACHE_FILE):
+            with open(CHECKED_CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"加载检查缓存失败: {e}")
+    return {}
+
+# 保存已检查的监控项缓存
+def save_checked_cache(cache):
+    """保存已检查的监控项缓存"""
+    try:
+        with open(CHECKED_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"保存检查缓存失败: {e}")
+
+# 检查监控项是否已检查过
+def is_monitor_checked(monitor):
+    """检查监控项是否已检查过"""
+    cache = load_checked_cache()
+    monitor_key = f"{monitor['type']}:{monitor['remote_id']}:{monitor['mid']}"
+    
+    if monitor_key in cache:
+        check_info = cache[monitor_key]
+        checked_time = check_info.get('checked_at', 0)
+        # 检查缓存是否过期
+        if time.time() - checked_time < CACHE_EXPIRY:
+            debug_log(f"[SCHEDULER] 监控项 {monitor['name']} 最近5分钟内已检查过，跳过")
+            return True
+    return False
+
+# 标记监控项为已检查
+def mark_monitor_checked(monitor, info):
+    """标记监控项为已检查"""
+    cache = load_checked_cache()
+    monitor_key = f"{monitor['type']}:{monitor['remote_id']}:{monitor['mid']}"
+    
+    cache[monitor_key] = {
+        'checked_at': time.time(),
+        'total': info.get('total', 0),
+        'name': monitor['name']
+    }
+    
+    save_checked_cache(cache)
+    debug_log(f"[SCHEDULER] 标记监控项 {monitor['name']} 为已检查")
+
+# 清空检查缓存
+def clear_checked_cache():
+    """清空检查缓存"""
+    try:
+        if os.path.exists(CHECKED_CACHE_FILE):
+            os.remove(CHECKED_CACHE_FILE)
+        debug_log(f"[SCHEDULER] 清空检查缓存")
+    except Exception as e:
+        logger.error(f"清空检查缓存失败: {e}")
 
 scheduler = BackgroundScheduler()
 bili_api = BiliAPI()
@@ -39,17 +124,30 @@ def check_updates_job():
     has_update = False
     # 收集更新信息，用于集中发送邮件
     batch_updates = []
-    debug_log(f"[SCHEDULER] 初始化批量更新列表")
+    # 收集失败的监控项，用于后续重新检查
+    failed_monitors = []
+    # 反爬检测标志
+    anti_crawl_detected = False
+    debug_log(f"[SCHEDULER] 初始化批量更新列表和失败监控项列表")
 
     for item in monitors:
+        # 检查是否最近5分钟内已检查过
+        if is_monitor_checked(item):
+            continue
+            
         debug_log(
             f"[SCHEDULER] 检查监控项: {item['name']} (类型: {item['type']}, ID: {item['remote_id']})"
         )
         # 获取最新信息
         info = bili_api.get_info(item["type"], item["remote_id"], item["mid"])
         if not info:
-            debug_log(f"[SCHEDULER] 获取{item['name']}信息失败，跳过")
-            continue
+            debug_log(f"[SCHEDULER] 获取{item['name']}信息失败，可能触发了反爬机制")
+            # 检测到反爬，中止后续操作
+            anti_crawl_detected = True
+            break
+        
+        # 标记为已检查
+        mark_monitor_checked(item, info)
 
         current_total = item["total_count"]
         remote_total = info["total"]
@@ -73,7 +171,7 @@ def check_updates_job():
 
             # 获取最新视频列表并添加到更新记录
             latest_videos = bili_api.get_latest_videos(
-                item["type"], item["remote_id"], item["mid"], diff
+                item["type"], item["remote_id"], item["mid"], item.get("up_mid", item["mid"]), diff
             )
             debug_log(
                 f"[SCHEDULER] {item['name']} - 获取到 {len(latest_videos)} 个最新视频"
@@ -226,15 +324,130 @@ def check_updates_job():
             debug_log(f"[SCHEDULER] 批量邮件内容预览: {batch_content[:300]}...")
             send_notification(settings, subject, batch_content)
 
-    # 计算下一次检查时间，使用与实际调度相同的全局冷却时间配置
-    global_cooldown = int(
-        settings.get("global_cooldown", 1200)
-    )  # 使用与实际调度相同的默认值1200秒
-    next_time = datetime.datetime.now() + datetime.timedelta(seconds=global_cooldown)
-    db.update_setting("next_check_time", next_time.strftime("%Y-%m-%d %H:%M:%S"))
-    debug_log(
-        f"[SCHEDULER] 更新下次检查时间为: {next_time.strftime('%Y-%m-%d %H:%M:%S')}"
-    )
+    # 重新检查失败的监控项（仅在未检测到反爬时执行）
+    if failed_monitors and not anti_crawl_detected:
+        logger.info(f"[{datetime.datetime.now()}] 开始重新检查 {len(failed_monitors)} 个失败的监控项")
+        print(f"开始重新检查 {len(failed_monitors)} 个失败的监控项...")
+        debug_log(f"[SCHEDULER] 开始重新检查 {len(failed_monitors)} 个失败的监控项")
+        
+        # 添加额外的延迟，避免触发反爬机制
+        time.sleep(5)  # 等待5秒
+        
+        for item in failed_monitors:
+            logger.info(f"重新检查失败监控项: {item['name']}")
+            debug_log(f"[SCHEDULER] 重新检查失败监控项: {item['name']} (类型: {item['type']}, ID: {item['remote_id']})")
+            
+            # 添加额外的延迟
+            time.sleep(2)  # 每个失败项之间等待2秒
+            
+            # 获取最新信息
+            info = bili_api.get_info(item["type"], item["remote_id"], item["mid"])
+            if not info:
+                debug_log(f"[SCHEDULER] 重新检查{item['name']}仍然失败，跳过")
+                continue
+            
+            current_total = item["total_count"]
+            remote_total = info["total"]
+            debug_log(
+                f"[SCHEDULER] {item['name']} - 当前记录总数: {current_total}, B站实际总数: {remote_total}"
+            )
+            
+            # 发现更新
+            if remote_total > current_total:
+                diff = remote_total - current_total
+                logger.info(f"  - 检测到更新: {diff} 个新视频")
+                print(f"检测到 {item['name']} 更新了 {diff} 个视频")
+                debug_log(f"[SCHEDULER] {item['name']} - 检测到更新: {diff} 个新视频")
+                
+                # 获取最新视频列表并添加到更新记录
+                latest_videos = bili_api.get_latest_videos(
+                    item["type"], item["remote_id"], item["mid"], item.get("up_mid", item["mid"]), diff
+                )
+                debug_log(
+                    f"[SCHEDULER] {item['name']} - 获取到 {len(latest_videos)} 个最新视频"
+                )
+                
+                # 获取最新视频的发布时间
+                update_time = datetime.datetime.now()
+                if latest_videos:
+                    # 最新视频在列表的第一个位置
+                    update_time = datetime.datetime.fromtimestamp(
+                        latest_videos[0]["publish_time"]
+                    )
+                debug_log(f"[SCHEDULER] {item['name']} - 更新时间: {update_time}")
+                
+                # 添加视频更新记录到数据库
+                for video in latest_videos:
+                    debug_log(
+                        f"[SCHEDULER] {item['name']} - 添加视频更新记录: {video['title']}"
+                    )
+                    success, msg = db.add_video_update(
+                        item["id"],
+                        video["video_id"],
+                        video["title"],
+                        video["publish_time"],
+                        video["cover"],
+                    )
+                
+                # 更新数据库中的总数
+                db.update_monitor_count(item["id"], remote_total)
+                debug_log(f"[SCHEDULER] {item['name']} - 更新总数为: {remote_total}")
+                
+                has_update = True
+                
+                # 构建更新信息
+                videos_html = ""
+                for video in latest_videos:
+                    video_time = datetime.datetime.fromtimestamp(
+                        video["publish_time"]
+                    ).strftime("%Y-%m-%d %H:%M")
+                    if video["video_id"].isdigit():
+                        video_url = f"https://www.bilibili.com/video/av{video['video_id']}"
+                    else:
+                        video_url = f"https://www.bilibili.com/video/{video['video_id']}"
+                    videos_html += f"<p><a href='{video_url}' target='_blank'>{video['title']}</a> ({video_time})</p>"
+                
+                # 添加到批量更新列表
+                batch_updates.append({
+                    "id": item["id"],
+                    "name": item["name"],
+                    "type": item["type"],
+                    "remote_id": item["remote_id"],
+                    "mid": item["mid"],
+                    "diff": diff,
+                    "remote_total": remote_total,
+                    "update_time": update_time,
+                    "videos_html": videos_html
+                })
+    
+    # 计算下一次检查时间
+    if anti_crawl_detected:
+        # 检测到反爬，强制延迟35分钟
+        logger.warning(f"[{datetime.datetime.now()}] 检测到反爬机制，强制延迟35分钟后再检查")
+        print("检测到反爬机制，强制延迟35分钟后再检查...")
+        debug_log(f"[SCHEDULER] 检测到反爬机制，强制延迟35分钟后再检查")
+        
+        # 强制延迟35分钟
+        cooldown_seconds = 35 * 60  # 35分钟
+        next_time = datetime.datetime.now() + datetime.timedelta(seconds=cooldown_seconds)
+        db.update_setting("next_check_time", next_time.strftime("%Y-%m-%d %H:%M:%S"))
+        debug_log(
+            f"[SCHEDULER] 由于反爬，更新下次检查时间为: {next_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        # 更新全局冷却时间配置，确保下次检查也使用35分钟
+        db.update_setting("global_cooldown", str(cooldown_seconds))
+        debug_log(f"[SCHEDULER] 更新全局冷却时间为: {cooldown_seconds}秒")
+    else:
+        # 正常情况，使用配置的冷却时间
+        global_cooldown = int(
+            settings.get("global_cooldown", 1200)
+        )  # 使用与实际调度相同的默认值1200秒
+        next_time = datetime.datetime.now() + datetime.timedelta(seconds=global_cooldown)
+        db.update_setting("next_check_time", next_time.strftime("%Y-%m-%d %H:%M:%S"))
+        debug_log(
+            f"[SCHEDULER] 更新下次检查时间为: {next_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
     logger.info(f"[{datetime.datetime.now()}] 检查完成")
     print("检查完成")
@@ -358,7 +571,7 @@ def check_single_monitor(monitor_id):
 
         # 获取最新视频列表并添加到更新记录
         latest_videos = bili_api.get_latest_videos(
-            monitor["type"], monitor["remote_id"], monitor["mid"], diff
+            monitor["type"], monitor["remote_id"], monitor["mid"], monitor.get("up_mid", monitor["mid"]), diff
         )
         debug_log(
             f"[SCHEDULER] {monitor['name']} - 获取到 {len(latest_videos)} 个最新视频"

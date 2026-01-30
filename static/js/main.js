@@ -443,6 +443,9 @@ async function loadAllData() {
     refreshRecentUpdates();
 }
 
+// 计时器变量
+let nextCheckTimer = null;
+
 // 1. 状态与概览
 async function loadStatus() {
     let data;
@@ -461,7 +464,13 @@ async function loadStatus() {
     const active = data.status.active;
     const statusText = document.getElementById('monitor-status-text');
     statusText.textContent = active ? "运行中 🟢" : "已停止 🔴";
-    document.getElementById('next-check-time').textContent = data.status.next_check;
+    
+    // 显示下次检查时间
+    const nextCheckElement = document.getElementById('next-check-time');
+    nextCheckElement.textContent = data.status.next_check;
+    
+    // 启动计时器
+    startNextCheckTimer(data.status.next_check);
 
     // 仅在有令牌时显示按钮状态
     if (currentToken) {
@@ -471,6 +480,71 @@ async function loadStatus() {
             btnStart.style.display = active ? 'none' : 'inline-block';
             btnStop.style.display = active ? 'inline-block' : 'none';
         }
+    }
+}
+
+// 启动下次检查时间计时器
+function startNextCheckTimer(nextCheckTime) {
+    // 清除之前的计时器
+    if (nextCheckTimer) {
+        clearInterval(nextCheckTimer);
+        nextCheckTimer = null;
+    }
+    
+    // 检查是否是时间格式
+    const timeRegex = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
+    if (timeRegex.test(nextCheckTime)) {
+        // 是时间格式，启动计时器
+        nextCheckTimer = setInterval(() => {
+            updateNextCheckCountdown(nextCheckTime);
+        }, 1000);
+        // 立即执行一次
+        updateNextCheckCountdown(nextCheckTime);
+    }
+}
+
+// 更新下次检查时间倒计时
+function updateNextCheckCountdown(nextCheckTime) {
+    const nextCheckElement = document.getElementById('next-check-time');
+    if (!nextCheckElement) return;
+    
+    // 解析目标时间
+    const targetTime = new Date(nextCheckTime).getTime();
+    const currentTime = new Date().getTime();
+    const timeDiff = targetTime - currentTime;
+    
+    if (timeDiff > 0) {
+        // 计算剩余时间
+        const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+        
+        // 显示剩余时间
+        if (hours > 0) {
+            nextCheckElement.textContent = `触发反爬强制延迟: ${hours}小时${minutes}分钟${seconds}秒`;
+        } else if (minutes > 0) {
+            nextCheckElement.textContent = `触发反爬强制延迟: ${minutes}分钟${seconds}秒`;
+        } else {
+            nextCheckElement.textContent = `触发反爬强制延迟: ${seconds}秒`;
+        }
+        
+        // 检查是否是反爬延迟
+        if (hours >= 45) {
+            nextCheckElement.style.color = 'var(--danger-color)';
+            nextCheckElement.style.fontWeight = 'bold';
+        } else {
+            nextCheckElement.style.color = '';
+            nextCheckElement.style.fontWeight = '';
+        }
+    } else {
+        // 时间已到，清除计时器
+        if (nextCheckTimer) {
+            clearInterval(nextCheckTimer);
+            nextCheckTimer = null;
+        }
+        nextCheckElement.textContent = '正在检查...';
+        // 重新加载状态
+        setTimeout(loadStatus, 2000);
     }
 }
 
@@ -782,7 +856,7 @@ function renderRecentUpdatesList(updates) {
 
 // 打开视频
 function openVideo(videoId) {
-    window.open(`https://www.bilibili.com/video/av${videoId}`, '_blank');
+    window.open(`https://www.bilibili.com/video/${videoId}`, '_blank');
 }
 
 // --- 交互操作 ---

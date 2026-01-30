@@ -12,8 +12,15 @@ from . import APIError, ValidationError, logger
 class BiliAPI:
     def __init__(self):
         self.base_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.7559.110 Safari/537.36",
             "Origin": "https://space.bilibili.com",
+            "Accept": "*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Connection": "keep-alive",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
         }
 
     def _get(self, url, mid_for_referer, max_retries=3):
@@ -41,7 +48,18 @@ class BiliAPI:
 
                 if resp.status_code == 200:
                     debug_log("BiliAPI", "_get", f"请求成功: {url}")
-                    return resp.json()
+                    try:
+                        # 检查响应内容是否为空
+                        if not resp.text:
+                            logger.error(f"API响应为空: {url}")
+                            debug_log("BiliAPI", "_get", f"响应为空: {url}")
+                            return None
+                        return resp.json()
+                    except ValueError as e:
+                        logger.error(f"API响应解析失败: {e} for URL {url}")
+                        debug_log("BiliAPI", "_get", f"响应解析失败: {e}, URL={url}")
+                        # 遇到JSON解析错误时直接返回None，跳过剩余重试
+                        return None
                 else:
                     logger.error(
                         f"API请求失败: 状态码 {resp.status_code} for URL {url}, retry {retry+1}/{max_retries}"
@@ -148,7 +166,7 @@ class BiliAPI:
 
     def _get_season(self, season_id, mid):
         # 合集 API
-        url = f"https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={season_id}&sort_reverse=false&page_size=1&page_num=1"
+        url = f"https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={season_id}&sort_reverse=false&page_size=30&page_num=1"
         debug_log(
             "BiliAPI",
             "_get_season",
@@ -202,18 +220,19 @@ class BiliAPI:
         )
         return None
 
-    def get_latest_videos(self, monitor_type, remote_id, mid, count=5):
+    def get_latest_videos(self, monitor_type, remote_id, mid, current_mid, count=5):
         """
         获取合集中最新的视频列表
         monitor_type: 'series' 或 'season'
         remote_id: 系列ID或合集ID
         mid: 用户ID
+        current_mid: 当前用户ID（用于系列API）
         count: 获取的视频数量
         """
         debug_log(
             "BiliAPI",
             "get_latest_videos",
-            f"获取最新视频: type={monitor_type}, remote_id={remote_id}, mid={mid}, count={count}",
+            f"获取最新视频: type={monitor_type}, remote_id={remote_id}, mid={mid}, current_mid={current_mid}, count={count}",
         )
 
         if monitor_type == "season":
@@ -246,7 +265,7 @@ class BiliAPI:
                     if not archive:
                         debug_log("BiliAPI", "get_latest_videos", f"跳过空视频对象")
                         continue
-                    video_id = archive.get("aid", "")
+                    video_id = archive.get("bvid", "")
                     if not video_id:
                         debug_log(
                             "BiliAPI", "get_latest_videos", f"跳过无video_id的视频"
@@ -269,8 +288,8 @@ class BiliAPI:
                 )
                 return videos
         elif monitor_type == "series":
-            # 系列 API - 获取最新视频
-            url = f"https://api.bilibili.com/x/polymer/web-space/home/seasons_series?mid={mid}&series_id={remote_id}&sort_reverse=true&page_size={count}&page_num=1"
+            # 系列 API - 获取最新视频 (使用新API)
+            url = f"https://api.bilibili.com/x/series/archives?mid={mid}&current_mid={current_mid}&series_id={remote_id}&only_normal=true&sort=desc&ps={count}&pn=1"
             debug_log("BiliAPI", "get_latest_videos", f"获取系列最新视频: URL={url}")
 
             data = self._get(url, mid)
@@ -298,7 +317,7 @@ class BiliAPI:
                     if not archive:
                         debug_log("BiliAPI", "get_latest_videos", f"跳过空视频对象")
                         continue
-                    video_id = archive.get("aid", "")
+                    video_id = archive.get("bvid", "")
                     if not video_id:
                         debug_log(
                             "BiliAPI", "get_latest_videos", f"跳过无video_id的视频"
